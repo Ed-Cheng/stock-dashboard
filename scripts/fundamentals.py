@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 import scripts.plotly_layouts as ply
 import datetime as dt
-import datapane as dp
+# import datapane as dp
 
 def get_dividends(ticker):
 
@@ -19,15 +19,15 @@ def get_dividends(ticker):
 
     return ply.create_plotly(dividends)
 
-def upload_to_datapane(plot, title):
-    report = dp.Report(dp.Plot(plot))  # Create a report
-    report.upload(name=title, open=True, visibility='PUBLIC')
+# def upload_to_datapane(plot, title):
+#     report = dp.Report(dp.Plot(plot))  # Create a report
+#     report.upload(name=title, open=True, visibility='PUBLIC')
 
-    print("success")
+#     print("success")
 
-    return True
+#     return True
 
 
 if __name__ == '__main__':
     plot = get_dividends("AAPL")
-    upload_to_datapane(plot, "AAPL Dividends Plot")
+    # upload_to_datapane(plot, "AAPL Dividends Plot")
