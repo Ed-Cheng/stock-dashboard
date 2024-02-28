@@ -1,6 +1,8 @@
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from datetime import timedelta
+
 from scripts.indicators import calculate_psar
 
 from scripts.stock_analysis import get_extrema_idx_for_plot, get_extrema_eval_for_plot
@@ -214,13 +216,13 @@ class CandlestickPlot:
                     args=[
                         "yaxis.range",
                         [
-                            0.95 * min(self.df.iloc[-days:]["Low"]),
-                            1.05 * max(self.df.iloc[-days:]["High"]),
+                            0.9 * min(self.df.iloc[-days:]["Low"]),
+                            1.1 * max(self.df.iloc[-days:]["High"]),
                         ],
                     ],
                     args2=[
                         "xaxis.range",
-                        [self.df.index[-days], self.df.index[-1]],
+                        [self.df.index[-days], self.df.index[-1] + timedelta(days=1)],
                     ],
                 )
             )

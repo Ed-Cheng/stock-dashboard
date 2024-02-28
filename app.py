@@ -1,17 +1,17 @@
-from flask import Flask, render_template
+from flask import Flask, send_from_directory
 
 app = Flask(__name__)
 
+
 @app.route("/")
-def index():
-    greetings = "Hello World, this is my first plotly plot"
-
-    ls = ["aa", "ss", "ff"]
+def big():
+    return send_from_directory("static_html", "big.html")
 
 
-    return render_template("newhome.html", ls=ls)
+@app.route("/tech")
+def tech():
+    return send_from_directory("static_html", "tech.html")
 
 
 if __name__ == "__main__":
-    app.directory='./'
-    app.run(host='127.0.0.1', port=5000)
+    app.run(debug=True)
