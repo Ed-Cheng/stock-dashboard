@@ -5,7 +5,11 @@ from datetime import timedelta
 
 from scripts.indicators import calculate_psar
 
-from scripts.stock_analysis import get_extrema_idx_for_plot, get_extrema_eval_for_plot
+from scripts.stock_analysis import (
+    eval_max_min,
+    get_extrema_idx_for_plot,
+    get_extrema_eval_for_plot,
+)
 
 
 class CandlestickPlot:
@@ -131,7 +135,9 @@ class CandlestickPlot:
 
     def add_min_max_analysis(self, order):
         max_idx, min_idx = get_extrema_idx_for_plot(order, self.df)
-        max_eval, min_eval = get_extrema_eval_for_plot(max_idx, min_idx, self.df)
+
+        max_eval, min_eval = eval_max_min(max_idx, min_idx, self.df)
+        max_eval_str, min_eval_str = get_extrema_eval_for_plot(max_eval, min_eval)
 
         scatter_minima = go.Scatter(
             x=self.df.index[min_idx],
@@ -139,7 +145,7 @@ class CandlestickPlot:
             mode="markers+text",
             marker=dict(color="red", size=8),
             name="Min",
-            text=min_eval,
+            text=min_eval_str,
             textposition="bottom center",
         )
 
@@ -149,7 +155,7 @@ class CandlestickPlot:
             mode="markers+text",
             marker=dict(color="green", size=8),
             name="Max",
-            text=max_eval,
+            text=max_eval_str,
             textposition="top center",
         )
 

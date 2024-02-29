@@ -66,17 +66,14 @@ def eval_max_min(
     for i in range(1, len(sorted_extrema[0])):
         curr = sorted_extrema[:, i]
         eval = round((((curr[1] - prev[1]) / prev[1])) * 100, 1)
-        (
-            max_eval.append(f"{str(eval)}%")
-            if eval > 0
-            else min_eval.append(f"{str(eval)}%")
-        )
+        max_eval.append(eval) if eval > 0 else min_eval.append(eval)
         prev = curr
 
     return max_eval, min_eval
 
 
 def get_extrema_idx_for_plot(order: int, stock: pd.DataFrame) -> tuple[list, list]:
+    """Remove duplicate extrema indexes for plotting purpose"""
     max_idx = argrelmax(stock["High"].values, order=order)[0]
     min_idx = argrelmin(stock["Low"].values, order=order)[0]
 
@@ -85,9 +82,9 @@ def get_extrema_idx_for_plot(order: int, stock: pd.DataFrame) -> tuple[list, lis
     return max_idx, min_idx
 
 
-def get_extrema_eval_for_plot(
-    max_idx: list, min_idx: list, stock: pd.DataFrame
-) -> tuple[list, list]:
-    max_eval, min_eval = eval_max_min(max_idx, min_idx, stock)
+def get_extrema_eval_for_plot(max_eval: list, min_eval: list) -> tuple[list, list]:
+    """Turn int extrema evaluations to str for plotting purpose"""
+    max_eval_str = [f"{i}%" for i in max_eval]
+    min_eval_str = [f"{i}%" for i in min_eval]
 
-    return max_eval, min_eval
+    return max_eval_str, min_eval_str

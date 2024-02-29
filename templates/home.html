@@ -33,18 +33,21 @@
 
 <body>
 
-    <h5>{{greetings}}</h5>
+    <h5>{{ greetings }}</h5>
     <h5>come to nono </h5>
 
     {% for stock, plot in plots.items() %}
     <!-- <div id="plotly-{{ stock }}" style="margin-bottom: 0px;"></div> -->
     <div class="plot-container">
         <div id="plotly-{{ stock }}" class="plotly-plot"></div>
-        <div class="plot-text">
-            <!-- Replace 'Some text here...' with whatever text you want to display -->
+        <!-- <div class="plot-text">
             Some text here... or any dynamic content related to {{ stock }}.
             <br>
             no no lala
+        </div> -->
+        <div class="plot-text">
+            <pre>{{ analysis }}</pre>
+            <!-- <p>{{ analysis|safe }}</p> -->
         </div>
     </div>
 
