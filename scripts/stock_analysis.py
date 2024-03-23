@@ -88,3 +88,25 @@ def get_extrema_eval_for_plot(max_eval: list, min_eval: list) -> tuple[list, lis
     min_eval_str = [f"{i}%" for i in min_eval]
 
     return max_eval_str, min_eval_str
+
+
+def get_extrema_analysis(max_idx: list, min_idx: list) -> str:
+    """Calculate the period between each extrema"""
+
+    def peak_to_peak_analysis(last_ext, other_ext):
+        interval = []
+        total_pks = min(len(last_ext), len(other_ext))
+        interval.append(
+            np.array(last_ext[-total_pks:]) - np.array(other_ext[-total_pks:])
+        )
+        interval.append(
+            np.array(other_ext[-total_pks + 1 :]) - np.array(last_ext[-total_pks:-1])
+        )
+        return interval
+
+    if max_idx[-1] > min_idx[-1]:
+        min2max, max2min = peak_to_peak_analysis(max_idx, min_idx)
+    else:
+        max2min, min2max = peak_to_peak_analysis(min_idx, max_idx)
+
+    return max2min, min2max

@@ -1,0 +1,74 @@
+{% extends "layouts/main.html" %}
+
+{% block head %}
+<script src="//cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content%}
+
+<style>
+    .dashboard-block {
+        display: flex;
+        margin-bottom: 10px;
+        /* Space between each block of plots */
+    }
+
+    .plot-large {
+        flex: 3;
+        /* Larger flex-grow value means more space is allocated to the big plot */
+        margin-right: 0px;
+        /* Space between the big plot and small plots */
+    }
+
+    .plot-small-container {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        gap: 0px;
+        /* Space between the two small plots */
+    }
+
+    .plot-small {
+        /* This ensures that the small plots take up all available space in their container. */
+        flex: 1;
+    }
+</style>
+
+<body>
+
+    <h5>{{ greetings }}</h5>
+    <h5>update come &plusmn; to nono 2 </h5>
+
+    {% for stock, plot in plots.items() %}
+    <div class="dashboard-block">
+        <div id="plotly-{{ stock }}" class="plot-large">
+            <!-- big plot -->
+        </div>
+        <div class="plot-small-container">
+            <div id="small1-{{ stock }}" class="plot-small">
+                <!-- small plot 1 -->
+            </div>
+            <div id="small2-{{ stock }}" class="plot-small">
+                <!-- small plot 2 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var graph = {{ plot | safe }};
+        Plotly.plot('plotly-{{ stock }}', graph, {});
+
+        var small_one = {{ small1[stock] | safe }};
+        Plotly.plot('small1-{{ stock }}', small_one, {});
+
+        var small_two = {{ small2[stock] | safe }};
+        Plotly.plot('small2-{{ stock }}', small_two, {});
+    </script>
+    {% endfor %}
+
+
+</body>
+
+
+
+{% endblock %}

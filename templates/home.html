@@ -34,20 +34,21 @@
 <body>
 
     <h5>{{ greetings }}</h5>
-    <h5>come to nono </h5>
+    <h5>come &plusmn; to nono </h5>
 
     {% for stock, plot in plots.items() %}
     <!-- <div id="plotly-{{ stock }}" style="margin-bottom: 0px;"></div> -->
     <div class="plot-container">
-        <div id="plotly-{{ stock }}" class="plotly-plot"></div>
+        <div id="plotly-{{ stock }}" class="plotly-plot">
+            <!-- big plot coming here -->
+        </div>
+
         <!-- <div class="plot-text">
-            Some text here... or any dynamic content related to {{ stock }}.
-            <br>
-            no no lala
+            <p>{{ analyses[stock] | safe }}</p>
         </div> -->
-        <div class="plot-text">
-            <pre>{{ analysis }}</pre>
-            <!-- <p>{{ analysis|safe }}</p> -->
+
+        <div id="small-{{ stock }}" class="plotly-text">
+            <!-- small plot coming here -->
         </div>
     </div>
 
@@ -55,6 +56,9 @@
     <script>
         var graph = {{ plot | safe }};
         Plotly.plot('plotly-{{ stock }}', graph, {});
+
+        var smallgraph = {{ plot | safe }};
+        Plotly.plot('small-{{ stock }}', smallgraph, {});
     </script>
 
     {% endfor %}

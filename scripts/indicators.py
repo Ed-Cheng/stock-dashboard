@@ -46,6 +46,6 @@ def calculate_psar(stock_data, af_step=0.02, af_max=0.2):
     psar_array[0] = data.iloc[0]["Close"]
 
     data["psar"] = psar_array
-    data["psar_diff"] = data["Close"] - psar_array
+    data["psar_diff"] = (data["Close"] - psar_array) / data["Close"]
 
     return data

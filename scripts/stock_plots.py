@@ -17,6 +17,7 @@ class CandlestickPlot:
         self.df = df
         self.fig = self.add_basic_candles()
         self.cal_technical_indicators()
+        self.extrema_data = {}
 
     def cal_technical_indicators(self):
         self.df["5ma"] = self.df["Close"].rolling(5).mean()
@@ -139,6 +140,13 @@ class CandlestickPlot:
         max_eval, min_eval = eval_max_min(max_idx, min_idx, self.df)
         max_eval_str, min_eval_str = get_extrema_eval_for_plot(max_eval, min_eval)
 
+        self.extrema_data = {
+            "max_idx": max_idx,
+            "min_idx": min_idx,
+            "max_eval": max_eval,
+            "min_eval": min_eval,
+        }
+
         scatter_minima = go.Scatter(
             x=self.df.index[min_idx],
             y=self.df["Low"].iloc[min_idx],
@@ -208,8 +216,12 @@ class CandlestickPlot:
             dict(
                 label="Reset",
                 method="relayout",
-                args=["xaxis.autorange", True],
-                args2=["yaxis.autorange", True],
+                args=[
+                    {
+                        "xaxis.autorange": True,
+                        "yaxis.autorange": True,
+                    }
+                ],
             )
         ]
 
@@ -220,15 +232,16 @@ class CandlestickPlot:
                     label=label,
                     method="relayout",
                     args=[
-                        "yaxis.range",
-                        [
-                            0.9 * min(self.df.iloc[-days:]["Low"]),
-                            1.1 * max(self.df.iloc[-days:]["High"]),
-                        ],
-                    ],
-                    args2=[
-                        "xaxis.range",
-                        [self.df.index[-days], self.df.index[-1] + timedelta(days=1)],
+                        {
+                            "xaxis.range": [
+                                self.df.index[-days],
+                                self.df.index[-1] + timedelta(days=days / 20),
+                            ],
+                            "yaxis.range": [
+                                0.9 * min(self.df.iloc[-days:]["Low"]),
+                                1.1 * max(self.df.iloc[-days:]["High"]),
+                            ],
+                        }
                     ],
                 )
             )
