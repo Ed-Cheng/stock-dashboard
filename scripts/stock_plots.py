@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import timedelta
@@ -83,6 +84,10 @@ class CandlestickPlot:
         dt_breaks = [d for d in dt_all.strftime("%Y-%m-%d").tolist() if not d in dt_obs]
         # hide dates with no values
         fig.update_xaxes(rangebreaks=[dict(values=dt_breaks)])
+
+        fig.update_yaxes(type="log", title_text="Candles (Log scale)", row=1, col=1)
+        fig.update_yaxes(title_text="Vol", row=2, col=1)
+        fig.update_yaxes(title_text="SAR", row=3, col=1)
 
         fig.update_layout(autosize=True, xaxis_rangeslider_visible=False)
         return fig
@@ -238,10 +243,10 @@ class CandlestickPlot:
                                 self.df.index[-1] + timedelta(days=days / 20),
                             ],
                             "yaxis.range": [
-                                0.9 * min(self.df.iloc[-days:]["Low"]),
-                                1.1 * max(self.df.iloc[-days:]["High"]),
+                                np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
+                                np.log10(1.1 * max(self.df.iloc[-days:]["High"])),
                             ],
-                        }
+                        },
                     ],
                 )
             )

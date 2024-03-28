@@ -35,6 +35,8 @@ def analyse_data(stocks, stock_data, past_days):
         plot.add_psar()
 
         plot.fig.update_layout(title={"text": stock})
+
+        fig.update_yaxes(type="log")
         plot.fig.update_yaxes(title_text="Candles", row=1, col=1)
         plot.fig.update_yaxes(title_text="Vol", row=2, col=1)
         plot.fig.update_yaxes(title_text="SAR", row=3, col=1)
@@ -60,7 +62,6 @@ def analyse_data(stocks, stock_data, past_days):
             )
         )
 
-        # Update plot layout
         fig.update_layout(
             title=dict(text="Peak to peak analysis", font=dict(size=10)),
             yaxis_title="days",
@@ -76,25 +77,12 @@ def analyse_data(stocks, stock_data, past_days):
         )
 
         fig2 = px.scatter(x=[0, 1, 2, 3, 4], y=[0, 1, 4, 9, 16])
-        fig2.update_layout(margin=dict(l=10, r=10, t=10, b=10))
+        fig2.update_layout(
+            title=dict(text="AI system Maintaining", font=dict(size=20)),
+            margin=dict(l=10, r=10, t=100, b=10),
+        )
         small1[stock] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
         small2[stock] = json.dumps(fig2, cls=plotly.utils.PlotlyJSONEncoder)
-
-        # plot.fig.update_layout(height=400)
-        # fig.update_layout(height=200)
-
-        # plot.fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-        # fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-
-        # all_plot.append(
-        #     {
-        #         "big_plot": json.dumps(plot.fig, cls=plotly.utils.PlotlyJSONEncoder),
-        #         "small_plots": [
-        #             json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
-        #             json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
-        #         ],
-        #     }
-        # )
 
     return plots, small1, small2
 
