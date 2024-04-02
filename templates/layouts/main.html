@@ -4,11 +4,11 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>This is a tutorial </title>
-        <meta name="description" content="I present to you a free tutorial for developing a mobile friendly app" />
-        <meta name="keywords" content="Tutorial, Mobile,  Free" />
-        <meta name="author" content="<author>" />
-        <meta name="copyright" content="<author>" />
+        <title>Stock dashboard</title>
+        <meta name="description" content="Simple yet powerful stock dashboard" />
+        <meta name="keywords" content="Stock analysis, technical analysis" />
+        <meta name="author" content="Edward Cheng" />
+        <meta name="copyright" content="Edward Cheng" />
         <meta name="robots" content="index" />
         <meta name="robots" content="follow" />
         <meta name="msapplication-TileColor" content="#da532c">
@@ -28,18 +28,11 @@
         <div class="container">
             <div class="topnav" id="myTopnav">
                 <a href="/" class="active">Home</a>
+                <a href="/mag7" class="active">Magnificent 7</a>
+                <a href="/ai" class="active">AI</a>
                 <a href="/tech" class="active">Tech</a>
-                <div class="dropdown">
-                    <button class="dropbtn">Example
-                        <i class="fa fa-caret-down"></i>
-                    </button>
-                    <div class="dropdown-content">
-                        <a href="/Example1">Example 1 </a>
-                    </div>
-                </div>
-                <a href="javascript:void(0);" class="icon" onclick="myFunction()">
-                    <i class="fa fa-bars"></i>
-                </a>
+                <a href="/meme" class="active">Meme</a>
+                <a href="/watch" class="active">Watchlist</a>
             </div>
 
             <div style="clear: both">
@@ -48,17 +41,6 @@
                 {% block content%}{% endblock %}
 
             </div>
-
-            <script>
-                function myFunction() {
-                    var x = document.getElementById("myTopnav");
-                    if (x.className === "topnav") {
-                        x.className += " responsive";
-                    } else {
-                        x.className = "topnav";
-                    }
-                }
-            </script>
 
         </div>
     </body>
