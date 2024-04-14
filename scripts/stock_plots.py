@@ -16,7 +16,7 @@ from scripts.stock_analysis import (
 
 class PlotInfo:
     def __init__(self, df: pd.DataFrame):
-        self.df = df[df["Date"].dt.dayofweek < 5]
+        self.df = df
         self.cal_technical_indicators()
         self.candle = self.add_basic_candles()
         self.extrema_data = {}
@@ -271,8 +271,8 @@ class PlotInfo:
                             "xaxis.range": [
                                 self.df.index[-days],
                                 # leave some space on the right hand side
-                                # self.df.index[-1] + timedelta(days=days / 20),
-                                self.df.index[-1] + days / 20,
+                                self.df.index[-1] + timedelta(days=days / 20),
+                                # self.df.index[-1] + days / 20,
                             ],
                             "yaxis.range": [
                                 np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
@@ -305,6 +305,7 @@ class PlotInfo:
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
         fig = self.add_button(fig)
+        fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
 
         return fig
 
