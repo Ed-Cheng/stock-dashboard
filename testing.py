@@ -1,7 +1,4 @@
 from flask import Flask, render_template
-import os
-from pathlib import Path
-
 import plotly
 import json
 import scripts.stock_plots as stock_plots
@@ -52,47 +49,49 @@ def analyse_data(stocks, stock_data, past_days):
     return candle_plots, p2p_plots, ai_plots
 
 
-def generate_page(html_page, html_path, stocks, past_days):
+@app.route("/")
+def home():
+    stocks = ["NVDA", "META"]
+
     stock_data = download_data(stocks)
 
-    candle_plots, p2p_plots, ai_plots = analyse_data(stocks, stock_data, past_days)
+    candle_plots, p2p_plots, ai_plots = analyse_data(stocks, stock_data, 400)
 
     update_time = f"Last update: {str(datetime.now())[:-10]} (GMT)"
     stock_in_page = "This page includes: " + " ".join(stocks)
-    with app.app_context():
-        rendered_template = render_template(
-            html_page,
-            stock_in_page=stock_in_page,
-            update_time=update_time,
-            plots=candle_plots,
-            small1=p2p_plots,
-            small2=ai_plots,
-        )
 
-        with open(html_path, "w") as static_file:
-            static_file.write(rendered_template)
+    return render_template(
+        "homeplots.html",
+        stock_in_page=stock_in_page,
+        update_time=update_time,
+        plots=candle_plots,
+        small1=p2p_plots,
+        small2=ai_plots,
+    )
 
-    return
+
+@app.route("/tech")
+def tech():
+    stocks = ["AMD", "SMCI"]
+
+    stock_data = download_data(stocks)
+
+    candle_plots, p2p_plots, ai_plots = analyse_data(stocks, stock_data, 400)
+
+    update_time = f"Last update: {str(datetime.now())[:-10]} (GMT)"
+    stock_in_page = "This page includes: " + " ".join(stocks)
+
+    return render_template(
+        "homeplots.html",
+        stock_in_page=stock_in_page,
+        update_time=update_time,
+        plots=candle_plots,
+        small1=p2p_plots,
+        small2=ai_plots,
+    )
 
 
 if __name__ == "__main__":
-    ticker_lists = {
-        "mag7": ["NVDA", "META", "MSFT", "AMZN", "TSLA", "GOOG", "AAPL", "NFLX"],
-        "ai": ["AMD", "SMCI", "AVGO", "MRVL", "QCOM", "INTC", "TSM", "ASML"],
-        "tech": ["ARM", "MU", "TXN", "ADBE", "ORCL", "ON", "ISRG", "PI"],
-        "meme": ["PLTR", "AI", "CRM", "ROKU", "SNOW", "PTON", "FUBO", "AFRM", "SOFI"],
-        "watch": ["COIN", "U", "UPST", "WOLF", "SPOT", "DELL"],
-    }
-
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-
-    THIS_FOLDER = Path(__file__).parent.resolve()
-
-    for tag, tickers in ticker_lists.items():
-        my_file = THIS_FOLDER / f"/static_html/{tag}.html"
-
-        # html_path = os.path.join(script_directory, f"/static_html/{tag}.html")
-        # generate_page("homeplots.html", my_file, tickers, 400)
-        # print(f"Finished generating {tag}")
-
-        print(my_file)
+    # app.directory = "./"
+    # app.run(host="127.0.0.1", port=5000)
+    app.run(debug=True)

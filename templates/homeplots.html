@@ -1,4 +1,4 @@
-{% extends "layouts/main.html" %}
+{% extends "main.html" %}
 
 {% block head %}
 <script src="//cdn.plot.ly/plotly-latest.min.js"></script>
@@ -36,8 +36,9 @@
 
 <body>
 
-    <h5>{{ greetings }}</h5>
-    <h5>Trade along!</h5>
+    <h5>{{ update_time }}</h5>
+    <h5>{{ stock_in_page }}</h5>
+    <h5>The nature of the stock market is volatility.</h5>
     {% for stock, plot in plots.items() %}
     <div class="dashboard-block">
         <div id="plotly-{{ stock }}" class="plot-large">

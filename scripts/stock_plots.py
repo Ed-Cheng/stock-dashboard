@@ -16,17 +16,18 @@ from scripts.stock_analysis import (
 
 class PlotInfo:
     def __init__(self, df: pd.DataFrame):
-        self.df = df
-        self.candle = self.add_basic_candles()
-        # self.peak2peak = self.generate_peak2peak_plot()
+        self.df = df[df["Date"].dt.dayofweek < 5]
         self.cal_technical_indicators()
+        self.candle = self.add_basic_candles()
         self.extrema_data = {}
 
     def cal_technical_indicators(self):
         self.df["5ma"] = self.df["Close"].rolling(5).mean()
         self.df["10ma"] = self.df["Close"].rolling(10).mean()
         self.df["20ma"] = self.df["Close"].rolling(20).mean()
+        self.df["12ema"] = self.df["Close"].ewm(span=12).mean()
         self.df["20ema"] = self.df["Close"].ewm(span=20).mean()
+        self.df["26ema"] = self.df["Close"].ewm(span=26).mean()
         self.df["60ema"] = self.df["Close"].ewm(span=60).mean()
         self.df["std"] = self.df["Close"].rolling(20).std()
         self.df["upper_bb"] = self.df["20ma"] + 2 * self.df["std"]
@@ -35,12 +36,12 @@ class PlotInfo:
 
     def add_basic_candles(self) -> go.Figure:
         fig = make_subplots(
-            rows=3,
+            rows=4,
             cols=1,
             shared_xaxes=True,
             # subplot_titles=("Candle Chart", "Volume", "PSAR"),
-            vertical_spacing=0,
-            row_width=[0.15, 0.15, 0.7],
+            vertical_spacing=0.02,
+            row_width=[0.1, 0.1, 0.1, 0.7],
         )
 
         # Create candlestick plot
@@ -59,19 +60,16 @@ class PlotInfo:
             col=1,
         )
 
-        # Create a column to store the color flag
+        # Create volume
         self.df["vol_color"] = ""
-
-        # Compare each number with the previous one and set the color flag accordingly
-        green_mask = self.df["Volume"] > self.df["Volume"].shift()
-        self.df.loc[green_mask, "vol_color"] = "green"
-        self.df.loc[~green_mask, "vol_color"] = "red"
+        green_vol = self.df["Volume"] > self.df["Volume"].shift()
+        self.df.loc[green_vol, "vol_color"] = "green"
+        self.df.loc[~green_vol, "vol_color"] = "red"
 
         fig.add_trace(
             go.Bar(
                 x=self.df.index,
                 y=self.df["Volume"],
-                # marker_color="#689be3",
                 marker_color=self.df["vol_color"],
                 showlegend=False,
             ),
@@ -79,20 +77,41 @@ class PlotInfo:
             col=1,
         )
 
-        # build complete timepline from start date to end date
-        dt_all = pd.date_range(start=self.df.index[0], end=self.df.index[-1])
-        # retrieve the dates that ARE in the original datset
-        dt_obs = [d.strftime("%Y-%m-%d") for d in pd.to_datetime(self.df.index)]
-        # define dates with missing values
-        dt_breaks = [d for d in dt_all.strftime("%Y-%m-%d").tolist() if not d in dt_obs]
-        # hide dates with no values
-        fig.update_xaxes(rangebreaks=[dict(values=dt_breaks)])
+
+        # Create macd
+        self.df["macd"] = (self.df["12ema"] - self.df["26ema"]) / self.df["26ema"]
+        self.df["macd_signal"] = self.df["macd"].ewm(span=9).mean()
+        self.df["macd_hist"] = self.df["macd"] - self.df["macd_signal"]
+
+        self.df["macd_color"] = ""
+        green_macd = self.df["macd_hist"] > self.df["macd_hist"].shift()
+        self.df.loc[green_macd, "macd_color"] = "green"
+        self.df.loc[~green_macd, "macd_color"] = "red"
+
+        fig.add_trace(
+            go.Bar(
+                x=self.df.index,
+                y=self.df["macd_hist"],
+                marker_color=self.df["macd_color"],
+                showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        # # Remove blank dates
+        # dt_all = pd.date_range(start=self.df.index[0], end=self.df.index[-1])
+        # dt_obs = [d.strftime("%Y-%m-%d") for d in pd.to_datetime(self.df.index)]
+        # dt_breaks = [d for d in dt_all.strftime("%Y-%m-%d").tolist() if not d in dt_obs]
+        # fig.update_xaxes(rangebreaks=[dict(values=dt_breaks)])
 
         fig.update_yaxes(type="log", title_text="Candles(log)", row=1, col=1)
         fig.update_yaxes(title_text="Vol", row=2, col=1)
         fig.update_yaxes(title_text="SAR", row=3, col=1)
+        fig.update_yaxes(title_text="MACD", row=4, col=1)
 
-        fig.update_layout(autosize=True, xaxis_rangeslider_visible=False)
+        fig.update_layout(autosize=True, xaxis_rangeslider_visible=False, height=600)
+
         return fig
 
     def add_ma_analysis(self, fig) -> go.Figure:
@@ -120,7 +139,7 @@ class PlotInfo:
                 y=self.df["20ma"] + (self.df["std"] * 2),
                 # line=dict(color="#a9e5fc", width=0.5),
                 line=dict(color="#689be3", width=0.5),
-                name="BB up",
+                showlegend=False,
             )
         )
 
@@ -131,7 +150,7 @@ class PlotInfo:
                 line=dict(color="#689be3", width=0.5),
                 fill="tonexty",
                 fillcolor="rgba(104, 155, 227, 0.3)",
-                name="BB low",
+                name="Bollinger",
             )
         )
 
@@ -234,6 +253,8 @@ class PlotInfo:
                     {
                         "xaxis.autorange": True,
                         "yaxis.autorange": True,
+                        "yaxis2.autorange": True,
+                        "yaxis3.autorange": True,
                     }
                 ],
             )
@@ -249,11 +270,21 @@ class PlotInfo:
                         {
                             "xaxis.range": [
                                 self.df.index[-days],
-                                self.df.index[-1] + timedelta(days=days / 20),
+                                # leave some space on the right hand side
+                                # self.df.index[-1] + timedelta(days=days / 20),
+                                self.df.index[-1] + days / 20,
                             ],
                             "yaxis.range": [
                                 np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
                                 np.log10(1.1 * max(self.df.iloc[-days:]["High"])),
+                            ],
+                            "yaxis2.range": [
+                                (0.95 * min(self.df.iloc[-days:]["Volume"])),
+                                (1.05 * max(self.df.iloc[-days:]["Volume"])),
+                            ],
+                            "yaxis3.range": [
+                                (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
+                                (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
                             ],
                         },
                     ],
@@ -272,8 +303,8 @@ class PlotInfo:
         fig = self.add_basic_candles()
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
-        fig = self.add_button(fig)
         fig = self.add_psar(fig)
+        fig = self.add_button(fig)
 
         return fig
 
