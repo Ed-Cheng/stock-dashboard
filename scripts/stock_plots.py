@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import timedelta
+from datetime import timedelta, datetime
+import yfinance as yf
 
 from scripts.indicators import calculate_psar
 
@@ -15,8 +16,10 @@ from scripts.stock_analysis import (
 
 
 class PlotInfo:
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
+    def __init__(self, ticker_object: yf.Ticker, symbol: str, period: str):
+        self.df = ticker_object.history(period=period)
+        self.ticker_object = ticker_object
+        self.symbol = symbol
         self.cal_technical_indicators()
         self.candle = self.add_basic_candles()
         self.extrema_data = {}
@@ -77,7 +80,6 @@ class PlotInfo:
             col=1,
         )
 
-
         # Create macd
         self.df["macd"] = (self.df["12ema"] - self.df["26ema"]) / self.df["26ema"]
         self.df["macd_signal"] = self.df["macd"].ewm(span=9).mean()
@@ -99,18 +101,78 @@ class PlotInfo:
             col=1,
         )
 
-        # # Remove blank dates
-        # dt_all = pd.date_range(start=self.df.index[0], end=self.df.index[-1])
-        # dt_obs = [d.strftime("%Y-%m-%d") for d in pd.to_datetime(self.df.index)]
-        # dt_breaks = [d for d in dt_all.strftime("%Y-%m-%d").tolist() if not d in dt_obs]
-        # fig.update_xaxes(rangebreaks=[dict(values=dt_breaks)])
-
         fig.update_yaxes(type="log", title_text="Candles(log)", row=1, col=1)
         fig.update_yaxes(title_text="Vol", row=2, col=1)
         fig.update_yaxes(title_text="SAR", row=3, col=1)
         fig.update_yaxes(title_text="MACD", row=4, col=1)
 
-        fig.update_layout(autosize=True, xaxis_rangeslider_visible=False, height=600)
+        fig.update_layout(
+            autosize=True,
+            title={"text": self.symbol},
+            xaxis_rangeslider_visible=False,
+            height=600,
+        )
+
+        return fig
+
+    def add_forecast(self, fig) -> go.Figure:
+        op_dates = self.ticker_object.options
+
+        upper = []
+        lower = []
+        date = []
+
+        # Option contracts in 5 weeks (35 days)
+        for i in [0, 1, 2, 3, 4]:
+            days = (datetime.strptime(op_dates[i], "%Y-%m-%d") - datetime.now()).days
+
+            call_chain = self.ticker_object.option_chain(op_dates[i]).calls
+            call_idx = sum(call_chain["inTheMoney"]) - 1
+            call_strike = call_chain.iloc[call_idx]["strike"]
+            call_iv = call_chain.iloc[call_idx]["impliedVolatility"]
+
+            put_chain = self.ticker_object.option_chain(op_dates[i]).puts
+            put_idx = -sum(put_chain["inTheMoney"])
+            put_strike = put_chain.iloc[put_idx]["strike"]
+            put_iv = put_chain.iloc[put_idx]["impliedVolatility"]
+
+            strike = (call_strike + put_strike) / 2
+            iv = (call_iv + put_iv) / 2
+            forecast_std = iv * strike * np.sqrt(days / 365)
+
+            if not upper:
+                date.append(self.df.index[-1])
+                upper.append(strike)
+                lower.append(strike)
+
+            date.append(op_dates[i])
+            upper.append(strike + forecast_std)
+            lower.append(strike - forecast_std)
+
+        fig.add_trace(
+            go.Scatter(
+                x=date,
+                y=upper,
+                line=dict(color="#c8c8c8", width=0.5),
+                mode="lines+markers",
+                name="ATM IV forecast",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=date,
+                y=lower,
+                line=dict(color="#c8c8c8", width=0.5),
+                mode="lines+markers",
+                fill="tonexty",
+                fillcolor="rgba(150, 150, 150, 0.5)",
+                showlegend=False,
+            ),
+            row=1,
+            col=1,
+        )
 
         return fig
 
@@ -270,9 +332,8 @@ class PlotInfo:
                         {
                             "xaxis.range": [
                                 self.df.index[-days],
-                                # leave some space on the right hand side
-                                self.df.index[-1] + timedelta(days=days / 20),
-                                # self.df.index[-1] + days / 20,
+                                # add space for forecasts
+                                self.df.index[-1] + timedelta(4 * np.sqrt(days)),
                             ],
                             "yaxis.range": [
                                 np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
@@ -301,6 +362,18 @@ class PlotInfo:
 
     def generate_candle_plot(self, p2p_order=4) -> go.Figure:
         fig = self.add_basic_candles()
+        fig = self.add_forecast(fig)
+        fig = self.add_ma_analysis(fig)
+        fig = self.add_min_max_analysis(fig, order=p2p_order)
+        fig = self.add_psar(fig)
+        fig = self.add_button(fig)
+        fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
+
+        return fig
+
+    def generate_candle_plot_no_op(self, p2p_order=4) -> go.Figure:
+        fig = self.add_basic_candles()
+        # fig = self.add_forecast(fig)
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)

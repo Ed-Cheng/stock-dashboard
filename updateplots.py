@@ -27,9 +27,10 @@ def analyse_data(stocks, stock_data, past_days):
     p2p_plots = {}
     ai_plots = {}
     for stock in stocks:
-        stock_price = stock_data.tickers[stock].history(period=f"{past_days}d")
+        stock_plot = stock_plots.PlotInfo(
+            stock_data.tickers[stock], stock, f"{past_days}d"
+        )
 
-        stock_plot = stock_plots.PlotInfo(stock_price)
         # Main candle plots
         candle = stock_plot.generate_candle_plot(p2p_order=4)
         candle.update_layout(title={"text": stock})
@@ -84,15 +85,18 @@ if __name__ == "__main__":
         "watch": ["COIN", "U", "UPST", "WOLF", "SPOT", "DELL"],
     }
 
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-
-    THIS_FOLDER = Path(__file__).parent.resolve()
-
+    # For py anywhere daily tasks
     for tag, tickers in ticker_lists.items():
-        my_file = THIS_FOLDER / f"/static_html/{tag}.html"
+        generate_page(
+            "homeplots.html",
+            f"/home/edwardcheng/mysite/static_html/{tag}.html",
+            tickers,
+            250,
+        )
+        print(f"Finished generating {tag}")
 
-        # html_path = os.path.join(script_directory, f"/static_html/{tag}.html")
-        # generate_page("homeplots.html", my_file, tickers, 400)
-        # print(f"Finished generating {tag}")
-
-        print(my_file)
+    # For local machine
+    for tag, tickers in ticker_lists.items():
+        my_file = f"static_html/{tag}.html"
+        generate_page("homeplots.html", my_file, tickers, 250)
+        print(f"Finished generating {tag}")
