@@ -1,17 +1,20 @@
-import pandas as pd
+import os
+import json
+from datetime import datetime, timedelta
+
+
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import timedelta, datetime
 import yfinance as yf
 
 from scripts.indicators import calculate_psar
-
 from scripts.stock_analysis import (
     eval_max_min,
-    get_extrema_idx_for_plot,
-    get_extrema_eval_for_plot,
     get_extrema_analysis,
+    get_extrema_eval_for_plot,
+    get_extrema_idx_for_plot,
 )
 
 
@@ -23,6 +26,7 @@ class PlotInfo:
         self.cal_technical_indicators()
         self.candle = self.add_basic_candles()
         self.extrema_data = {}
+        self.forecast_folder = "past_forecast"
 
     def cal_technical_indicators(self):
         self.df["5ma"] = self.df["Close"].rolling(5).mean()
@@ -115,17 +119,27 @@ class PlotInfo:
 
         return fig
 
-    def add_forecast(self, fig) -> go.Figure:
+    def update_forecast_data(self):
+        if os.path.exists(f"{self.forecast_folder}/{self.symbol}.json"):
+            with open(f"{self.forecast_folder}/{self.symbol}.json", "r") as f:
+                forecast_data = json.load(f)
+        else:
+            forecast_data = {}
+
+        if self.df.index[-1] in forecast_data:
+            return
+
         op_dates = self.ticker_object.options
 
         upper = []
         lower = []
         date = []
+        last_date = pd.Timestamp(self.df.index[-1]).strftime("%Y-%m-%d")
+        # last_date = last_date.strftime("%Y-%m-%d")
+        last_date = datetime.strptime(last_date, "%Y-%m-%d")
 
         # Option contracts in 5 weeks (35 days)
         for i in [0, 1, 2, 3, 4]:
-            days = (datetime.strptime(op_dates[i], "%Y-%m-%d") - datetime.now()).days
-
             call_chain = self.ticker_object.option_chain(op_dates[i]).calls
             call_idx = sum(call_chain["inTheMoney"]) - 1
             call_strike = call_chain.iloc[call_idx]["strike"]
@@ -136,12 +150,13 @@ class PlotInfo:
             put_strike = put_chain.iloc[put_idx]["strike"]
             put_iv = put_chain.iloc[put_idx]["impliedVolatility"]
 
+            days = (datetime.strptime(op_dates[i], "%Y-%m-%d") - last_date).days
             strike = (call_strike + put_strike) / 2
             iv = (call_iv + put_iv) / 2
             forecast_std = iv * strike * np.sqrt(days / 365)
 
             if not upper:
-                date.append(self.df.index[-1])
+                date.append(last_date.strftime("%Y-%m-%d"))
                 upper.append(strike)
                 lower.append(strike)
 
@@ -149,30 +164,68 @@ class PlotInfo:
             upper.append(strike + forecast_std)
             lower.append(strike - forecast_std)
 
-        fig.add_trace(
-            go.Scatter(
-                x=date,
-                y=upper,
-                line=dict(color="#c8c8c8", width=0.5),
-                mode="lines+markers",
-                name="ATM IV forecast",
-            ),
-            row=1,
-            col=1,
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=date,
-                y=lower,
-                line=dict(color="#c8c8c8", width=0.5),
-                mode="lines+markers",
-                fill="tonexty",
-                fillcolor="rgba(150, 150, 150, 0.5)",
-                showlegend=False,
-            ),
-            row=1,
-            col=1,
-        )
+        if len(forecast_data) >= 5:
+            oldest_date = min(forecast_data.keys())
+            del forecast_data[oldest_date]
+
+        forecast_data[last_date.strftime("%Y-%m-%d")] = {
+            "date": date,
+            "upper": upper,
+            "lower": lower,
+        }
+
+        with open(f"{self.forecast_folder}/{self.symbol}.json", "w") as f:
+            json.dump(forecast_data, f)
+
+        return
+
+    def add_forecast(self, fig) -> go.Figure:
+        self.update_forecast_data()
+
+        if os.path.exists(f"{self.forecast_folder}/{self.symbol}.json"):
+            with open(f"{self.forecast_folder}/{self.symbol}.json", "r") as f:
+                forecast_data = json.load(f)
+        else:
+            return fig
+
+        colour_set = {
+            "grey": "rgba(150, 150, 150, ",
+            "blue": "rgba(173, 216, 230, ",
+            "green": "rgba(144, 238, 144, ",
+            "pink": "rgba(255, 182, 193, ",
+            "purple": "rgba(218, 112, 214, ",
+        }
+        opacity_solid = "1.0)"
+        opacity_clear = "0.5)"
+
+        for data, colour in zip(forecast_data.values(), colour_set.values()):
+            pred_date = data["date"][0][-5:]
+            fig.add_trace(
+                go.Scatter(
+                    x=data["date"],
+                    y=data["upper"],
+                    line=dict(color=colour + opacity_solid, width=0.5),
+                    mode="lines+markers",
+                    name=f"{pred_date} forecast",
+                    showlegend=False,
+                ),
+                row=1,
+                col=1,
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=data["date"],
+                    y=data["lower"],
+                    line=dict(color=colour + opacity_solid, width=0.5),
+                    mode="lines+markers",
+                    fill="tonexty",
+                    fillcolor=colour + opacity_clear,
+                    name=f"{pred_date} forecast",
+                ),
+                row=1,
+                col=1,
+            )
 
         return fig
 
@@ -362,6 +415,7 @@ class PlotInfo:
 
     def generate_candle_plot(self, p2p_order=4) -> go.Figure:
         fig = self.add_basic_candles()
+        # fig = self.update_forecast_data(fig)
         fig = self.add_forecast(fig)
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
@@ -373,7 +427,7 @@ class PlotInfo:
 
     def generate_candle_plot_no_op(self, p2p_order=4) -> go.Figure:
         fig = self.add_basic_candles()
-        # fig = self.add_forecast(fig)
+        # fig = self.update_forecast_data(fig)
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
