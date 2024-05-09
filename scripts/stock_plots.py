@@ -2,7 +2,6 @@ import os
 import json
 from datetime import datetime, timedelta
 
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -23,12 +22,14 @@ class PlotInfo:
         self.df = ticker_object.history(period=period)
         self.ticker_object = ticker_object
         self.symbol = symbol
+        self.candle_title = symbol
         self.cal_technical_indicators()
-        self.candle = self.add_basic_candles()
+        # self.candle = self.add_basic_candles()
         self.extrema_data = {}
         self.forecast_folder = "past_forecast"
 
     def cal_technical_indicators(self):
+        self.df["chg"] = 100 * (1 - self.df["Close"].shift(1) / self.df["Close"])
         self.df["5ma"] = self.df["Close"].rolling(5).mean()
         self.df["10ma"] = self.df["Close"].rolling(10).mean()
         self.df["20ma"] = self.df["Close"].rolling(20).mean()
@@ -42,6 +43,10 @@ class PlotInfo:
         return
 
     def add_basic_candles(self) -> go.Figure:
+        for i in [10, 20]:
+            chg_mean = round(self.df["chg"].tail(i).abs().mean(), 1)
+            self.candle_title += f", {i}d +- {chg_mean}%"
+
         fig = make_subplots(
             rows=4,
             cols=1,
@@ -119,15 +124,19 @@ class PlotInfo:
 
         return fig
 
-    def update_forecast_data(self):
+    def update_forecast_data(self) -> float:
         if os.path.exists(f"{self.forecast_folder}/{self.symbol}.json"):
             with open(f"{self.forecast_folder}/{self.symbol}.json", "r") as f:
                 forecast_data = json.load(f)
         else:
             forecast_data = {}
 
-        if self.df.index[-1] in forecast_data:
-            return
+        # if self.df.index[-1] in forecast_data:
+        #     return
+
+        if len(forecast_data) >= 5:
+            oldest_date = min(forecast_data.keys())
+            del forecast_data[oldest_date]
 
         op_dates = self.ticker_object.options
 
@@ -137,6 +146,7 @@ class PlotInfo:
         last_date = pd.Timestamp(self.df.index[-1]).strftime("%Y-%m-%d")
         # last_date = last_date.strftime("%Y-%m-%d")
         last_date = datetime.strptime(last_date, "%Y-%m-%d")
+        near_iv_amplitude = 0
 
         # Option contracts in 5 weeks (35 days)
         for i in [0, 1, 2, 3, 4]:
@@ -159,14 +169,11 @@ class PlotInfo:
                 date.append(last_date.strftime("%Y-%m-%d"))
                 upper.append(strike)
                 lower.append(strike)
+                near_iv_amplitude = int(1e4 * (forecast_std / strike)) / 1e2
 
             date.append(op_dates[i])
             upper.append(strike + forecast_std)
             lower.append(strike - forecast_std)
-
-        if len(forecast_data) >= 5:
-            oldest_date = min(forecast_data.keys())
-            del forecast_data[oldest_date]
 
         forecast_data[last_date.strftime("%Y-%m-%d")] = {
             "date": date,
@@ -177,10 +184,11 @@ class PlotInfo:
         with open(f"{self.forecast_folder}/{self.symbol}.json", "w") as f:
             json.dump(forecast_data, f)
 
-        return
+        return near_iv_amplitude
 
     def add_forecast(self, fig) -> go.Figure:
-        self.update_forecast_data()
+        near_iv_amplitude = self.update_forecast_data()
+        self.candle_title += f", IV forecast +- {near_iv_amplitude}%"
 
         if os.path.exists(f"{self.forecast_folder}/{self.symbol}.json"):
             with open(f"{self.forecast_folder}/{self.symbol}.json", "r") as f:
@@ -189,14 +197,14 @@ class PlotInfo:
             return fig
 
         colour_set = {
-            "grey": "rgba(150, 150, 150, ",
-            "blue": "rgba(173, 216, 230, ",
-            "green": "rgba(144, 238, 144, ",
-            "pink": "rgba(255, 182, 193, ",
-            "purple": "rgba(218, 112, 214, ",
+            "grey": "rgba(100, 100, 100, ",
+            "blue": "rgba(100, 149, 237, ",
+            "green": "rgba(50, 205, 50, ",
+            "pink": "rgba(255, 105, 180, ",
+            "purple": "rgba(148, 0, 211, ",
         }
         opacity_solid = "1.0)"
-        opacity_clear = "0.5)"
+        opacity_clear = "0.1)"
 
         for data, colour in zip(forecast_data.values(), colour_set.values()):
             pred_date = data["date"][0][-5:]
@@ -407,7 +415,15 @@ class PlotInfo:
 
         fig.update_layout(
             updatemenus=[
-                dict(type="buttons", direction="right", x=0.5, y=1.2, buttons=buttons)
+                dict(
+                    type="buttons",
+                    direction="right",
+                    x=1,
+                    xanchor="right",
+                    y=1.2,
+                    yanchor="top",
+                    buttons=buttons,
+                )
             ]
         )
 
@@ -415,24 +431,55 @@ class PlotInfo:
 
     def generate_candle_plot(self, p2p_order=4) -> go.Figure:
         fig = self.add_basic_candles()
-        # fig = self.update_forecast_data(fig)
         fig = self.add_forecast(fig)
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
+        fig.update_layout(title=self.candle_title)
+
+        return fig
+
+    def generate_recent_candles(self, p2p_order=4, days=50) -> go.Figure:
+        fig = self.add_basic_candles()
+        fig = self.add_forecast(fig)
+        fig = self.add_ma_analysis(fig)
+        fig = self.add_min_max_analysis(fig, order=p2p_order)
+        fig = self.add_psar(fig)
+        args = {
+            "xaxis.range": [
+                self.df.index[-days],
+                # add space for forecasts
+                self.df.index[-1] + timedelta(4 * np.sqrt(days)),
+            ],
+            "yaxis.range": [
+                np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
+                np.log10(1.1 * max(self.df.iloc[-days:]["High"])),
+            ],
+            "yaxis2.range": [
+                (0.95 * min(self.df.iloc[-days:]["Volume"])),
+                (1.05 * max(self.df.iloc[-days:]["Volume"])),
+            ],
+            "yaxis3.range": [
+                (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
+                (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
+            ],
+        }
+
+        fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]), **args)
+        fig.update_layout(title=self.candle_title)
 
         return fig
 
     def generate_candle_plot_no_op(self, p2p_order=4) -> go.Figure:
         fig = self.add_basic_candles()
-        # fig = self.update_forecast_data(fig)
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
+        fig.update_layout(title=self.candle_title)
 
         return fig
 
