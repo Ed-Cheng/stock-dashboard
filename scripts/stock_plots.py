@@ -27,12 +27,14 @@ class PlotInfo:
         # self.candle = self.add_basic_candles()
         self.extrema_data = {}
         self.forecast_folder = "past_forecast"
+        self.macd_analysis = {}
 
     def cal_technical_indicators(self):
         self.df["chg"] = 100 * (1 - self.df["Close"].shift(1) / self.df["Close"])
         self.df["5ma"] = self.df["Close"].rolling(5).mean()
         self.df["10ma"] = self.df["Close"].rolling(10).mean()
         self.df["20ma"] = self.df["Close"].rolling(20).mean()
+        self.df["5ema"] = self.df["Close"].ewm(span=5).mean()
         self.df["12ema"] = self.df["Close"].ewm(span=12).mean()
         self.df["20ema"] = self.df["Close"].ewm(span=20).mean()
         self.df["26ema"] = self.df["Close"].ewm(span=26).mean()
@@ -48,12 +50,12 @@ class PlotInfo:
             self.candle_title += f", {i}d +- {chg_mean}%"
 
         fig = make_subplots(
-            rows=4,
+            rows=5,
             cols=1,
             shared_xaxes=True,
             # subplot_titles=("Candle Chart", "Volume", "PSAR"),
-            vertical_spacing=0.02,
-            row_width=[0.1, 0.1, 0.1, 0.7],
+            vertical_spacing=0.01,
+            row_width=[0.1, 0.1, 0.1, 0.1, 0.6],
         )
 
         # Create candlestick plot
@@ -114,6 +116,7 @@ class PlotInfo:
         fig.update_yaxes(title_text="Vol", row=2, col=1)
         fig.update_yaxes(title_text="SAR", row=3, col=1)
         fig.update_yaxes(title_text="MACD", row=4, col=1)
+        # fig.update_yaxes(title_text="MACD_diff", row=5, col=1)
 
         fig.update_layout(
             autosize=True,
@@ -212,8 +215,9 @@ class PlotInfo:
                 go.Scatter(
                     x=data["date"],
                     y=data["upper"],
-                    line=dict(color=colour + opacity_solid, width=0.5),
                     mode="lines+markers",
+                    line=dict(color=colour + opacity_solid, width=0.5),
+                    marker=dict(size=2),
                     name=f"{pred_date} forecast",
                     showlegend=False,
                 ),
@@ -225,8 +229,9 @@ class PlotInfo:
                 go.Scatter(
                     x=data["date"],
                     y=data["lower"],
-                    line=dict(color=colour + opacity_solid, width=0.5),
                     mode="lines+markers",
+                    line=dict(color=colour + opacity_solid, width=0.5),
+                    marker=dict(size=2),
                     fill="tonexty",
                     fillcolor=colour + opacity_clear,
                     name=f"{pred_date} forecast",
@@ -367,6 +372,113 @@ class PlotInfo:
 
         return fig
 
+    def add_macd_analysis(self, fig) -> go.Figure:
+        self.df["ema_bull"] = True
+        self.df[f"macd_1d_diff"] = self.df["macd_hist"] - self.df["macd_hist"].shift(1)
+        self.df[f"macd_2d_diff"] = self.df["macd_hist"] - self.df["macd_hist"].shift(2)
+
+        for i in ["5ema", "20ema", "60ema"]:
+            self.df[f"{i}_bull"] = self.df[i] > self.df[i].shift(1)
+            self.df["ema_bull"] *= self.df[f"{i}_bull"]
+
+        self.df["macd_1d_up"] = (
+            (self.df["macd_1d_diff"] > self.df["macd_1d_diff"].shift(1))
+            .rolling(2)
+            .sum()
+        )
+        self.df["macd_2d_up"] = (
+            (self.df["macd_2d_diff"] > self.df["macd_2d_diff"].shift(1))
+            .rolling(2)
+            .sum()
+        )
+        macd_up_idx = (self.df["macd_1d_up"] >= 2) * (self.df["macd_2d_up"] >= 2)
+
+        self.df["macd_1d_down"] = (
+            (self.df["macd_1d_diff"] < self.df["macd_1d_diff"].shift(1))
+            .rolling(2)
+            .sum()
+        )
+        self.df["macd_2d_down"] = (
+            (self.df["macd_2d_diff"] < self.df["macd_2d_diff"].shift(1))
+            .rolling(2)
+            .sum()
+        )
+        macd_down_idx = (self.df["macd_1d_down"] >= 2) * (self.df["macd_2d_down"] >= 2)
+
+        self.df["macd_1d_turn"] = np.where(self.df["macd_1d_diff"] < 0, 0, 1)
+        self.df["macd_2d_turn"] = np.where(self.df["macd_2d_diff"] < 0, 0, 1)
+
+        self.df["macd_turn_signal"] = self.df["macd_1d_turn"] * self.df["macd_2d_turn"]
+        self.df["psar_signal"] = self.df["psar_diff"] > 0
+        soft_rules = self.df["ema_bull"] + self.df["psar_signal"]
+        bull_idx = (self.df["macd_turn_signal"] > 0) * soft_rules
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index[bull_idx],
+                y=self.df["5ma"][bull_idx],
+                mode="markers",
+                marker=dict(color="black", symbol="diamond", size=6),
+                name="MACD bullish",
+            ),
+            row=1,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index[macd_up_idx],
+                y=self.df["5ma"][macd_up_idx] * 0.95,
+                mode="markers",
+                marker=dict(color="red", symbol="arrow-up", size=10),
+                name="MACD Enhanced",
+            ),
+            row=1,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index[macd_down_idx],
+                y=self.df["5ma"][macd_down_idx] * 1.05,
+                mode="markers",
+                marker=dict(color="green", symbol="arrow-down", size=10),
+                name="MACD Weaken",
+            ),
+            row=1,
+            col=1,
+        )
+
+        self.macd_analysis = {
+            "bull_idx": bull_idx,
+            "macd_up_idx": macd_up_idx,
+            "macd_down_idx": macd_down_idx,
+        }
+
+        for bar_plot in ["macd_1d_diff", "macd_2d_diff"]:
+            fig.add_trace(
+                go.Bar(
+                    x=self.df.index,
+                    y=self.df[bar_plot],
+                    name=bar_plot,
+                ),
+                row=5,
+                col=1,
+            )
+
+        # fig.add_trace(
+        #     go.Bar(
+        #         x=self.df.index,
+        #         y=self.df["macd_hist"],
+        #         marker_color=self.df["macd_color"],
+        #         showlegend=False,
+        #     ),
+        #     row=4,
+        #     col=1,
+        # )
+
+        return fig
+
     def add_button(self, fig) -> go.Figure:
         buttons = [
             dict(
@@ -378,6 +490,7 @@ class PlotInfo:
                         "yaxis.autorange": True,
                         "yaxis2.autorange": True,
                         "yaxis3.autorange": True,
+                        "yaxis4.autorange": True,
                     }
                 ],
             )
@@ -408,6 +521,14 @@ class PlotInfo:
                                 (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
                                 (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
                             ],
+                            "yaxis4.range": [
+                                (0.95 * min(self.df.iloc[-days:]["macd_hist"])),
+                                (1.05 * max(self.df.iloc[-days:]["macd_hist"])),
+                            ],
+                            "yaxis5.range": [
+                                (0.95 * min(self.df.iloc[-days:]["macd_2d_diff"])),
+                                (1.05 * max(self.df.iloc[-days:]["macd_2d_diff"])),
+                            ],
                         },
                     ],
                 )
@@ -435,6 +556,7 @@ class PlotInfo:
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_macd_analysis(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
         fig.update_layout(title=self.candle_title)
@@ -447,6 +569,7 @@ class PlotInfo:
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_macd_analysis(fig)
         args = {
             "xaxis.range": [
                 self.df.index[-days],
@@ -477,6 +600,7 @@ class PlotInfo:
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_macd_analysis(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
         fig.update_layout(title=self.candle_title)
