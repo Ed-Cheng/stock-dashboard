@@ -49,3 +49,16 @@ def calculate_psar(stock_data, af_step=0.02, af_max=0.2):
     data["psar_diff"] = (data["Close"] - psar_array) / data["Close"]
 
     return data
+
+
+def calculate_oscillator(df, days):
+    low = df["Low"].rolling(window=days).min()
+    high = df["High"].rolling(window=days).max()
+    df[f"os_k{days}"] = 100 * (df["Close"] - low) / (high - low)
+    df[f"os_d{days}"] = df[f"os_k{days}"].rolling(window=3).mean()
+
+    # df[f"os_kd{i}"] = df[f"os_k{i}"] - df[f"os_d{i}"]
+    # df[f"os_kd{i}_1d"] = df[f"os_kd{i}"] - df[f"os_kd{i}"].shift(1)
+    # df[f"os_kd{i}_2d"] = df[f"os_kd{i}"] - df[f"os_kd{i}"].shift(2)
+
+    return df

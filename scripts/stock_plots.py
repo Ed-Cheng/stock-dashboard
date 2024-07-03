@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
 
-from scripts.indicators import calculate_psar
+from scripts.indicators import calculate_psar, calculate_oscillator
 from scripts.stock_analysis import (
     eval_max_min,
     get_extrema_analysis,
@@ -101,22 +101,23 @@ class PlotInfo:
         self.df.loc[green_macd, "macd_color"] = "green"
         self.df.loc[~green_macd, "macd_color"] = "red"
 
-        fig.add_trace(
-            go.Bar(
-                x=self.df.index,
-                y=self.df["macd_hist"],
-                marker_color=self.df["macd_color"],
-                showlegend=False,
-            ),
-            row=4,
-            col=1,
-        )
+        # Initially added MACD but it is replacable with SAR
+        # fig.add_trace(
+        #     go.Bar(
+        #         x=self.df.index,
+        #         y=self.df["macd_hist"],
+        #         marker_color=self.df["macd_color"],
+        #         showlegend=False,
+        #     ),
+        #     row=4,
+        #     col=1,
+        # )
 
         fig.update_yaxes(type="log", title_text="Candles(log)", row=1, col=1)
-        fig.update_yaxes(title_text="Vol", row=2, col=1)
+        fig.update_yaxes(type="log", title_text="Vol(log)", row=2, col=1)
         fig.update_yaxes(title_text="SAR", row=3, col=1)
-        fig.update_yaxes(title_text="MACD", row=4, col=1)
-        # fig.update_yaxes(title_text="MACD_diff", row=5, col=1)
+        fig.update_yaxes(title_text="KDJ", row=4, col=1)
+        fig.update_yaxes(title_text="MACD_diff", row=5, col=1)
 
         fig.update_layout(
             autosize=True,
@@ -372,6 +373,38 @@ class PlotInfo:
 
         return fig
 
+    def add_oscillator(self, fig) -> go.Figure:
+        days = 14
+        self.df = calculate_oscillator(self.df, days=days)
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index,
+                y=self.df[f"os_k{days}"],
+                mode="lines",
+                line=dict(color="green"),
+                showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index,
+                y=self.df[f"os_d{days}"],
+                mode="lines",
+                line=dict(color="red"),
+                showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        fig.add_hline(y=80, line_dash="dash", row=4, col=1, line_color="black")
+        fig.add_hline(y=20, line_dash="dash", row=4, col=1, line_color="black")
+
+        return fig
+
     def add_macd_analysis(self, fig) -> go.Figure:
         self.df["ema_bull"] = True
         self.df[f"macd_1d_diff"] = self.df["macd_hist"] - self.df["macd_hist"].shift(1)
@@ -455,27 +488,108 @@ class PlotInfo:
             "macd_down_idx": macd_down_idx,
         }
 
-        for bar_plot in ["macd_1d_diff", "macd_2d_diff"]:
+        for bar_plot, color in zip(
+            ["macd_1d_diff", "macd_2d_diff"], ["blue", "purple"]
+        ):
             fig.add_trace(
                 go.Bar(
                     x=self.df.index,
                     y=self.df[bar_plot],
                     name=bar_plot,
+                    marker=dict(color=color),
                 ),
                 row=5,
                 col=1,
             )
 
-        # fig.add_trace(
-        #     go.Bar(
-        #         x=self.df.index,
-        #         y=self.df["macd_hist"],
-        #         marker_color=self.df["macd_color"],
-        #         showlegend=False,
-        #     ),
-        #     row=4,
-        #     col=1,
-        # )
+        return fig
+
+    def calculate_kdj(self, df, ilong=9):
+        # Calculate RSV
+        c = df["Close"]
+        h = df["High"].rolling(window=ilong).max()
+        l = df["Low"].rolling(window=ilong).min()
+
+        # raw stochastic value, how close to past min max
+        rsv = (100 * ((c - l) / (h - l))).fillna(50)
+
+        def kd_smoothing(factor):
+            smoothing = []
+            prev = 50
+            for i in factor:
+                curr = (2 / 3) * prev + (1 / 3) * i
+                smoothing.append(curr)
+                prev = curr
+            return smoothing
+
+        # Calculate K, D, and J
+        df["K"] = kd_smoothing(rsv)
+        df["D"] = kd_smoothing(df["K"])
+        df["J"] = 3 * df["K"] - 2 * df["D"]
+
+        return df
+
+    def add_kdj(self, fig) -> go.Figure:
+        ilong = 9
+        self.df = self.calculate_kdj(self.df, ilong=ilong)
+
+        # Plotting K, D, and J lines
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index,
+                y=self.df["K"],
+                mode="lines",
+                line=dict(color="orange"),
+                name="K%",
+                # showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index,
+                y=self.df["D"],
+                mode="lines",
+                line=dict(color="green"),
+                name="D%",
+                # showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=self.df.index,
+                y=self.df["J"],
+                mode="lines",
+                line=dict(color="fuchsia"),
+                name="J",
+                # showlegend=False,
+            ),
+            row=4,
+            col=1,
+        )
+
+        # Optional: add background color based on J and D comparison
+        for i in range(len(self.df)):
+            color = (
+                "rgba(0, 255, 0, 0.3)"
+                if self.df["J"].iloc[i] > self.df["D"].iloc[i]
+                else "rgba(255, 0, 0, 0.3)"
+            )
+            fig.add_vrect(
+                x0=self.df.index[i] - pd.Timedelta(days=0.5),
+                x1=self.df.index[i] + pd.Timedelta(days=0.5),
+                fillcolor=color,
+                opacity=0.5,
+                layer="below",
+                line_width=0,
+                row=4,
+                col=1,
+            )
 
         return fig
 
@@ -497,13 +611,15 @@ class PlotInfo:
         ]
 
         # Note that 1M is 20 trading days in stock market
-        for label, days in [("1M", 20), ("3M", 60), ("6M", 120)]:
+        for label, days in [("1M", 20), ("3M", 60)]:
+            # for label, days in [("1M", 20), ("3M", 60), ("6M", 120)]:
             buttons.append(
                 dict(
                     label=label,
                     method="relayout",
                     args=[
                         {
+                            # log scale is already added when adding "title"
                             "xaxis.range": [
                                 self.df.index[-days],
                                 # add space for forecasts
@@ -513,17 +629,9 @@ class PlotInfo:
                                 np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
                                 np.log10(1.1 * max(self.df.iloc[-days:]["High"])),
                             ],
-                            "yaxis2.range": [
-                                (0.95 * min(self.df.iloc[-days:]["Volume"])),
-                                (1.05 * max(self.df.iloc[-days:]["Volume"])),
-                            ],
                             "yaxis3.range": [
                                 (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
                                 (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
-                            ],
-                            "yaxis4.range": [
-                                (0.95 * min(self.df.iloc[-days:]["macd_hist"])),
-                                (1.05 * max(self.df.iloc[-days:]["macd_hist"])),
                             ],
                             "yaxis5.range": [
                                 (0.95 * min(self.df.iloc[-days:]["macd_2d_diff"])),
@@ -556,6 +664,7 @@ class PlotInfo:
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_oscillator(fig)
         fig = self.add_macd_analysis(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
@@ -563,34 +672,58 @@ class PlotInfo:
 
         return fig
 
-    def generate_recent_candles(self, p2p_order=4, days=50) -> go.Figure:
+    def generate_quick_analysis(self, days=50) -> go.Figure:
         fig = self.add_basic_candles()
-        fig = self.add_forecast(fig)
         fig = self.add_ma_analysis(fig)
-        fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_oscillator(fig)
         fig = self.add_macd_analysis(fig)
-        args = {
-            "xaxis.range": [
-                self.df.index[-days],
-                # add space for forecasts
-                self.df.index[-1] + timedelta(4 * np.sqrt(days)),
-            ],
-            "yaxis.range": [
-                np.log10(0.9 * min(self.df.iloc[-days:]["Low"])),
-                np.log10(1.1 * max(self.df.iloc[-days:]["High"])),
-            ],
-            "yaxis2.range": [
-                (0.95 * min(self.df.iloc[-days:]["Volume"])),
-                (1.05 * max(self.df.iloc[-days:]["Volume"])),
-            ],
-            "yaxis3.range": [
-                (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
-                (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
-            ],
+        # args = {
+        #     # log scale is already added when adding "title"
+        #     "xaxis.range": [
+        #         self.df.index[-days],
+        #         self.df.index[-1] + timedelta(5),
+        #     ],
+        #     "yaxis.range": [
+        #         np.log10(0.95 * min(self.df.iloc[-days:]["Low"])),
+        #         np.log10(1.05 * max(self.df.iloc[-days:]["High"])),
+        #     ],
+        #     "yaxis3.range": [
+        #         (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
+        #         (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
+        #     ],
+        #     "yaxis5.range": [
+        #         (0.95 * min(self.df.iloc[-days:]["macd_2d_diff"])),
+        #         (1.05 * max(self.df.iloc[-days:]["macd_2d_diff"])),
+        #     ],
+        # }
+
+        axis_updates = {
+            "xaxis": {
+                "range": [self.df.index[-days], self.df.index[-1] + timedelta(5)]
+            },
+            "yaxis": {
+                "range": [
+                    np.log10(0.95 * min(self.df.iloc[-days:]["Low"])),
+                    np.log10(1.05 * max(self.df.iloc[-days:]["High"])),
+                ]
+            },
+            "yaxis3": {
+                "range": [
+                    (0.95 * min(self.df.iloc[-days:]["psar_diff"])),
+                    (1.05 * max(self.df.iloc[-days:]["psar_diff"])),
+                ]
+            },
+            "yaxis5": {
+                "range": [
+                    (0.95 * min(self.df.iloc[-days:]["macd_2d_diff"])),
+                    (1.05 * max(self.df.iloc[-days:]["macd_2d_diff"])),
+                ]
+            },
         }
 
-        fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]), **args)
+        fig.update_layout(**axis_updates)
+        # fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
         fig.update_layout(title=self.candle_title)
 
         return fig
@@ -600,6 +733,7 @@ class PlotInfo:
         fig = self.add_ma_analysis(fig)
         fig = self.add_min_max_analysis(fig, order=p2p_order)
         fig = self.add_psar(fig)
+        fig = self.add_kdj(fig)
         fig = self.add_macd_analysis(fig)
         fig = self.add_button(fig)
         fig.update_layout(xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
